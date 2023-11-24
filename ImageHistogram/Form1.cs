@@ -17,6 +17,7 @@ namespace ImageHistogram
     {
         private Bitmap _image;
         private Bitmap _histogramImage;
+        private bool isVerticalScan = true;
         public Form1()
         {
             InitializeComponent();
@@ -50,56 +51,102 @@ namespace ImageHistogram
             int maximumIntensity = (int)numericUpDown3.Value;
             int intensityRange = (maximumIntensity-minimumIntensity) / intensityIntervals;
 
-            _histogramImage = new Bitmap(width, (maximumIntensity - minimumIntensity));
-
-            for (int x = 0; x < width; x++)
+            if (isVerticalScan)
             {
-                for (int i = 0; i < intensityIntervals; i++)
+                _histogramImage = new Bitmap(width, (maximumIntensity - minimumIntensity));
+
+                for (int x = 0; x < width; x++)
                 {
-                    int[] columnHistogram = new int[intensityRange];
-                    double[] columnCumulativeHistogram = new double[intensityRange];
-                    int pixelCount = 0;
-                    // Перебираємо рядки
-                    for (int y = 0; y < height; y++)
+                    for (int i = 0; i < intensityIntervals; i++)
                     {
-                        // Отримуємо кольор пікселя на позиції (x, y)
-                        Color pixelColor = _image.GetPixel(x, y);
-
-                        // Обчислюємо яскравість пікселя (середнє значення кольорів)
-                        int brightness = (int)(pixelColor.R + pixelColor.G + pixelColor.B)/3;
-
-                        if(brightness>= minimumIntensity && brightness<=maximumIntensity 
-                            && brightness >= i*intensityRange && brightness <(i+1)*intensityRange)
+                        int[] columnHistogram = new int[intensityRange];
+                        double[] columnCumulativeHistogram = new double[intensityRange];
+                        int pixelCount = 0;
+                        // Перебираємо рядки
+                        for (int y = 0; y < height; y++)
                         {
-                            columnHistogram[brightness % intensityRange]++;
-                            pixelCount++;
+                            // Отримуємо кольор пікселя на позиції (x, y)
+                            Color pixelColor = _image.GetPixel(x, y);
+
+                            // Обчислюємо яскравість пікселя (середнє значення кольорів)
+                            int brightness = (int)(pixelColor.R + pixelColor.G + pixelColor.B) / 3;
+
+                            if (brightness >= minimumIntensity && brightness <= maximumIntensity
+                                && brightness >= i * intensityRange && brightness < (i + 1) * intensityRange)
+                            {
+                                columnHistogram[brightness % intensityRange]++;
+                                pixelCount++;
+                            }
+                            // Оновлюємо гістограму для відповідної яскравості
+
                         }
-                        // Оновлюємо гістограму для відповідної яскравості
-                        
-                    }
-                    double accumulator = 0;
-                    for (int brightness = 0; brightness < intensityRange; brightness++)
-                    {
-                        if (pixelCount == 0)
+                        double accumulator = 0;
+                        for (int brightness = 0; brightness < intensityRange; brightness++)
                         {
-                            _histogramImage.SetPixel(x, brightness+i* intensityRange, Color.FromArgb(0, 0, 0));
-                            continue;
+                            if (pixelCount == 0)
+                            {
+                                _histogramImage.SetPixel(x, brightness + i * intensityRange, Color.FromArgb(0, 0, 0));
+                                continue;
+                            }
+                            accumulator += columnHistogram[brightness];
+                            columnCumulativeHistogram[brightness] = (accumulator) / pixelCount;
+                            int colorValue = (int)(columnCumulativeHistogram[brightness] * 255);
+                            _histogramImage.SetPixel(x, brightness + i * intensityRange, Color.FromArgb(colorValue, colorValue, colorValue));
                         }
-                        accumulator += columnHistogram[brightness];
-                        columnCumulativeHistogram[brightness] = (accumulator) / pixelCount;
-                        int colorValue = (int)(columnCumulativeHistogram[brightness] * 255);
-                        _histogramImage.SetPixel(x, brightness + i * intensityRange, Color.FromArgb(colorValue, colorValue, colorValue));
                     }
+
+                    toolStripProgressBar1.Value = (int)((double)x / width) * 100;
                 }
+            }
+            else
+            {
+                _histogramImage = new Bitmap((maximumIntensity - minimumIntensity), height);
 
-                toolStripProgressBar1.Value = (int)((double)x / width) * 100;
+                for (int y = 0; y < height; y++)
+                {
+                    for (int i = 0; i < intensityIntervals; i++)
+                    {
+                        int[] columnHistogram = new int[intensityRange];
+                        double[] columnCumulativeHistogram = new double[intensityRange];
+                        int pixelCount = 0;
+                        // Перебираємо рядки
+                        for (int x = 0; x < width; x++)
+                        {
+                            // Отримуємо кольор пікселя на позиції (x, y)
+                            Color pixelColor = _image.GetPixel(x, y);
 
+                            // Обчислюємо яскравість пікселя (середнє значення кольорів)
+                            int brightness = (int)(pixelColor.R + pixelColor.G + pixelColor.B) / 3;
 
+                            if (brightness >= minimumIntensity && brightness <= maximumIntensity
+                                && brightness >= i * intensityRange && brightness < (i + 1) * intensityRange)
+                            {
+                                columnHistogram[brightness % intensityRange]++;
+                                pixelCount++;
+                            }
+                            // Оновлюємо гістограму для відповідної яскравості
 
+                        }
+                        double accumulator = 0;
+                        for (int brightness = 0; brightness < intensityRange; brightness++)
+                        {
+                            if (pixelCount == 0)
+                            {
+                                _histogramImage.SetPixel(brightness + i * intensityRange, y, Color.FromArgb(0, 0, 0));
+                                continue;
+                            }
+                            accumulator += columnHistogram[brightness];
+                            columnCumulativeHistogram[brightness] = (accumulator) / pixelCount;
+                            int colorValue = (int)(columnCumulativeHistogram[brightness] * 255);
+                            _histogramImage.SetPixel(brightness + i * intensityRange, y, Color.FromArgb(colorValue, colorValue, colorValue));
+                        }
+                    }
+
+                    toolStripProgressBar1.Value = (int)((double)y / height) * 100;
+                }
             }
 
             pictureBox2.Image = _histogramImage;
-
 
         }
 
@@ -143,6 +190,18 @@ namespace ImageHistogram
         private void exitToolStripMenuItem_Click(object sender, EventArgs e)
         {
             this.Close();
+        }
+
+        private void verticalScanToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            horizontalScanToolStripMenuItem.Checked = false;
+            isVerticalScan = true;
+        }
+
+        private void horizontalScanToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            verticalScanToolStripMenuItem.Checked = false;
+            isVerticalScan = false;
         }
     }
 }

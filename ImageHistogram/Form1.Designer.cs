@@ -55,6 +55,10 @@
             this.toolStripStatusLabel1 = new System.Windows.Forms.ToolStripStatusLabel();
             this.toolStripStatusLabel2 = new System.Windows.Forms.ToolStripStatusLabel();
             this.toolStripProgressBar1 = new System.Windows.Forms.ToolStripProgressBar();
+            this.налаштуваняToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.обхідЗображенняToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.horizontalScanToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.verticalScanToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             this.menuStrip1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.numericUpDown1)).BeginInit();
@@ -79,7 +83,8 @@
             // 
             this.menuStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.файлToolStripMenuItem,
-            this.imageToolStripMenuItem});
+            this.imageToolStripMenuItem,
+            this.налаштуваняToolStripMenuItem});
             this.menuStrip1.Location = new System.Drawing.Point(0, 0);
             this.menuStrip1.Name = "menuStrip1";
             this.menuStrip1.Size = new System.Drawing.Size(1046, 24);
@@ -316,6 +321,41 @@
             this.toolStripProgressBar1.Name = "toolStripProgressBar1";
             this.toolStripProgressBar1.Size = new System.Drawing.Size(100, 16);
             // 
+            // налаштуваняToolStripMenuItem
+            // 
+            this.налаштуваняToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.обхідЗображенняToolStripMenuItem});
+            this.налаштуваняToolStripMenuItem.Name = "налаштуваняToolStripMenuItem";
+            this.налаштуваняToolStripMenuItem.Size = new System.Drawing.Size(101, 20);
+            this.налаштуваняToolStripMenuItem.Text = "Налаштування";
+            // 
+            // обхідЗображенняToolStripMenuItem
+            // 
+            this.обхідЗображенняToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.horizontalScanToolStripMenuItem,
+            this.verticalScanToolStripMenuItem});
+            this.обхідЗображенняToolStripMenuItem.Name = "обхідЗображенняToolStripMenuItem";
+            this.обхідЗображенняToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.обхідЗображенняToolStripMenuItem.Text = "Обхід зображення";
+            // 
+            // horizontalScanToolStripMenuItem
+            // 
+            this.horizontalScanToolStripMenuItem.CheckOnClick = true;
+            this.horizontalScanToolStripMenuItem.Name = "horizontalScanToolStripMenuItem";
+            this.horizontalScanToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.horizontalScanToolStripMenuItem.Text = "Горизонтальний";
+            this.horizontalScanToolStripMenuItem.Click += new System.EventHandler(this.horizontalScanToolStripMenuItem_Click);
+            // 
+            // verticalScanToolStripMenuItem
+            // 
+            this.verticalScanToolStripMenuItem.Checked = true;
+            this.verticalScanToolStripMenuItem.CheckOnClick = true;
+            this.verticalScanToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.verticalScanToolStripMenuItem.Name = "verticalScanToolStripMenuItem";
+            this.verticalScanToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.verticalScanToolStripMenuItem.Text = "Вертикальний";
+            this.verticalScanToolStripMenuItem.Click += new System.EventHandler(this.verticalScanToolStripMenuItem_Click);
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -375,6 +415,10 @@
         private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabel1;
         private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabel2;
         private System.Windows.Forms.ToolStripProgressBar toolStripProgressBar1;
+        private System.Windows.Forms.ToolStripMenuItem налаштуваняToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem обхідЗображенняToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem horizontalScanToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem verticalScanToolStripMenuItem;
     }
 }
 

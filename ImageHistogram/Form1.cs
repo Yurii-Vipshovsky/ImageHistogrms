@@ -45,8 +45,7 @@ namespace ImageHistogram
             }
         }
 
-        //ідея брати частини зображення і позиція буде непотрібна
-        private Color[,] calcPositionInterval(int startPos, int endPos, Bitmap imageCopy )
+        private Color[,] calcPositionInterval(int startPos, int endPos, Bitmap imageCopy, bool isVertical )
         {
             int width = imageCopy.Width;
             int height = imageCopy.Height;
@@ -54,97 +53,160 @@ namespace ImageHistogram
             int minimumIntensity = (int)numericUpDown2.Value;
             int maximumIntensity = (int)numericUpDown3.Value;
             int intensityRange = (maximumIntensity - minimumIntensity) / intensityIntervals;
-            Color[,] res = new Color[endPos-startPos,256];
-            for(int x = 0; x < endPos - startPos; ++x)
+            if (isVertical)
             {
-                for (int y=0; y < 256; ++y)
-                {
-                    res[x, y] = Color.Black;
-                }
-            }
-            for (int x = startPos; x < endPos; x++)
-            {
-                for (int y = 0; y < height; ++y)
-                {
-                    Color pixelColor = imageCopy.GetPixel(x, y);
-                    res[x - startPos, (int)(pixelColor.R + pixelColor.G + pixelColor.B) / 3] = Color.White;
-
-                }
-            }
-            return res;
-            //all black on create
-            //
-            for (int x = startPos; x < endPos; x++)
-            {
+                Color[,] res = new Color[endPos - startPos, (maximumIntensity - minimumIntensity)+1];
                 if (intensityIntervals == 255)
                 {
-                    //from 0 to 256 thinck about min-max Intensity
-                    for (int i = minimumIntensity; i < maximumIntensity; ++i)
+                    for (int x = 0; x < endPos - startPos; ++x)
                     {
-                        bool intensityAvailable = false;
+                        for (int y = 0; y < 256; ++y)
+                        {
+                            res[x, y] = Color.Black;
+                        }
+                    }
+                    for (int x = startPos; x < endPos; x++)
+                    {
                         for (int y = 0; y < height; ++y)
                         {
                             Color pixelColor = imageCopy.GetPixel(x, y);
-                            if ((int)(pixelColor.R + pixelColor.G + pixelColor.B) / 3 == i)
-                            {
-                                intensityAvailable = true;
-                                res[x - startPos, i] = Color.White;
-                                break;
-                            }
-                        }
-                        if (!intensityAvailable)
-                        {
-                            res[x - startPos, i] = Color.Black;
+                            res[x - startPos, (int)(pixelColor.R + pixelColor.G + pixelColor.B) / 3] = Color.White;
+
                         }
                     }
-
+                    return res;
                 }
-                
-            }
-            return res;
-            for (int x = startPos; x < endPos; x++)
-            {
-                for (int i = 0; i < intensityIntervals; i++)
+                for (int x = startPos; x < endPos; x++)
                 {
-                    int[] columnHistogram = new int[intensityRange];
-                    double[] columnCumulativeHistogram = new double[intensityRange];
-                    int pixelCount = 0;
-                    // Перебираємо рядки
-                    for (int y = 0; y < height; y++)
+                    for (int i = 0; i < intensityIntervals; i++)
                     {
-                        // Отримуємо кольор пікселя на позиції (x, y)
-                        Color pixelColor = imageCopy.GetPixel(x, y);
-
-                        // Обчислюємо яскравість пікселя (середнє значення кольорів)
-                        int brightness = (int)(pixelColor.R + pixelColor.G + pixelColor.B) / 3;
-
-                        if (brightness >= minimumIntensity && brightness <= maximumIntensity
-                            && brightness >= i * intensityRange && brightness < (i + 1) * intensityRange)
+                        int[] columnHistogram = new int[intensityRange];
+                        double[] columnCumulativeHistogram = new double[intensityRange];
+                        int pixelCount = 0;
+                        // Перебираємо рядки
+                        for (int y = 0; y < height; y++)
                         {
-                            columnHistogram[brightness % intensityRange]++;
-                            pixelCount++;
-                        }
-                        // Оновлюємо гістограму для відповідної яскравості
+                            // Отримуємо кольор пікселя на позиції (x, y)
+                            Color pixelColor = imageCopy.GetPixel(x, y);
 
-                    }
-                    double accumulator = 0;
-                    for (int brightness = 0; brightness < intensityRange; brightness++)
-                    {
-                        if (pixelCount == 0)
-                        {
-                            res[x-startPos, brightness + i * intensityRange] = Color.Black;
-                            //_histogramImage.SetPixel(x, brightness + i * intensityRange, Color.FromArgb(0, 0, 0));
-                            continue;
+                            // Обчислюємо яскравість пікселя (середнє значення кольорів)
+                            int brightness = (int)(pixelColor.R + pixelColor.G + pixelColor.B) / 3;
+
+                            if (brightness >= minimumIntensity && brightness <= maximumIntensity
+                                && brightness >= i * intensityRange && brightness < (i + 1) * intensityRange)
+                            {
+                                columnHistogram[brightness % intensityRange]++;
+                                pixelCount++;
+                            }
+                            // Оновлюємо гістограму для відповідної яскравості
+
                         }
-                        accumulator += columnHistogram[brightness];
-                        columnCumulativeHistogram[brightness] = (accumulator) / pixelCount;
-                        int colorValue = (int)(columnCumulativeHistogram[brightness] * 255);
-                        res[x-startPos, brightness + i * intensityRange] = Color.FromArgb(colorValue, colorValue, colorValue);
-                        //_histogramImage.SetPixel(x, brightness + i * intensityRange, Color.FromArgb(colorValue, colorValue, colorValue));
+                        double accumulator = 0;
+                        for (int brightness = 0; brightness < intensityRange; brightness++)
+                        {
+                            if (pixelCount == 0)
+                            {
+                                res[x - startPos, brightness + i * intensityRange] = Color.Black;
+                                continue;
+                            }
+                            accumulator += columnHistogram[brightness];
+                            columnCumulativeHistogram[brightness] = (accumulator) / pixelCount;
+                            int colorValue = (int)(columnCumulativeHistogram[brightness] * 255);
+                            res[x - startPos, brightness + i * intensityRange] = Color.FromArgb(colorValue, colorValue, colorValue);
+                        }
                     }
                 }
+                return res;
             }
-            return res;
+            else
+            {
+                Color[,] res = new Color[(maximumIntensity - minimumIntensity)+1, endPos - startPos];
+                if (intensityIntervals == 255)
+                {
+                    for (int y = 0; y < endPos - startPos; ++y)
+                    {
+                        for (int x = 0; x < 256; ++x)
+                        {
+                            res[x, y] = Color.Black;
+                        }
+                    }
+                    for (int y = startPos; y < endPos; y++)
+                    {
+                        for (int x = 0; x < width; x++)
+                        {
+                            Color pixelColor = imageCopy.GetPixel(x, y);
+                            res[(int)(pixelColor.R + pixelColor.G + pixelColor.B) / 3, y-startPos] = Color.White;
+
+                        }
+                    }
+                    return res;
+                }
+                for (int y = startPos; y < endPos; y++)
+                {
+                    for (int i = 0; i < intensityIntervals; i++)
+                    {
+                        int[] columnHistogram = new int[intensityRange];
+                        double[] columnCumulativeHistogram = new double[intensityRange];
+                        int pixelCount = 0;
+                        // Перебираємо рядки
+                        for (int x = 0; x < width; x++)
+                        {
+                            // Отримуємо кольор пікселя на позиції (x, y)
+                            Color pixelColor = imageCopy.GetPixel(x, y);
+
+                            // Обчислюємо яскравість пікселя (середнє значення кольорів)
+                            int brightness = (int)(pixelColor.R + pixelColor.G + pixelColor.B) / 3;
+
+                            if (brightness >= minimumIntensity && brightness <= maximumIntensity
+                                && brightness >= i * intensityRange && brightness < (i + 1) * intensityRange)
+                            {
+                                columnHistogram[brightness % intensityRange]++;
+                                pixelCount++;
+                            }
+                            // Оновлюємо гістограму для відповідної яскравості
+
+                        }
+                        double accumulator = 0;
+                        for (int brightness = 0; brightness < intensityRange; brightness++)
+                        {
+                            if (pixelCount == 0)
+                            {
+                                res[brightness + i * intensityRange, y - startPos] = Color.Black;
+                                continue;
+                            }
+                            accumulator += columnHistogram[brightness];
+                            columnCumulativeHistogram[brightness] = (accumulator) / pixelCount;
+                            int colorValue = (int)(columnCumulativeHistogram[brightness] * 255);
+                            res[brightness + i * intensityRange, y-startPos] = Color.FromArgb(colorValue, colorValue, colorValue);
+                        }
+                    }
+                }
+                return res;
+            }
+        }
+
+        private int calcMostFrequentIntensity(Bitmap image)
+        {
+            int width = image.Width;
+            int height = image.Height;
+            int minimumIntensity = (int)numericUpDown2.Value;
+            int maximumIntensity = (int)numericUpDown3.Value;
+            int[] pixelCount = new int[maximumIntensity-minimumIntensity+1];
+            for (int x = 0; x < width; x++)
+            {
+                for (int y = 0; y < height; y++)
+                {
+                    // Отримуємо кольор пікселя на позиції (x, y)
+                    Color pixelColor = image.GetPixel(x, y);
+
+                    // Обчислюємо яскравість пікселя (середнє значення кольорів)
+                    int brightness = (pixelColor.R + pixelColor.G + pixelColor.B) / 3;
+
+                    pixelCount[brightness] += 1;
+
+                }
+            }
+            return Array.IndexOf(pixelCount, pixelCount.Max());
         }
 
         private void button1_Click(object sender, EventArgs e)
@@ -156,7 +218,11 @@ namespace ImageHistogram
             int minimumIntensity = (int)numericUpDown2.Value;
             int maximumIntensity = (int)numericUpDown3.Value;
             int intensityRange = (maximumIntensity-minimumIntensity) / intensityIntervals;
-
+            int defectsThreshold = ((int)numericUpDown4.Value * (maximumIntensity - minimumIntensity))/100;
+            int mostFrequentIntensity = 0;
+            bool hasDefects = false;
+            Thread mostFrequentIntensityThread = new Thread(() => { mostFrequentIntensity = calcMostFrequentIntensity((Bitmap)_image.Clone()); });
+            mostFrequentIntensityThread.Start();
             if (isVerticalScan)
             {
                 _histogramImage = new Bitmap(width, (maximumIntensity - minimumIntensity));
@@ -174,14 +240,14 @@ namespace ImageHistogram
                         {
                             threads[i] = new Thread(() =>
                             {
-                                paralelResults[index] = calcPositionInterval(index * elemsForThread, width, imgClone);
+                                paralelResults[index] = calcPositionInterval(index * elemsForThread, width, imgClone, isVerticalScan);
                             });
                         }
                         else
                         {
                             threads[i] = new Thread(() =>
                             {
-                                paralelResults[index] = calcPositionInterval(index * elemsForThread, (index + 1) * elemsForThread, imgClone);
+                                paralelResults[index] = calcPositionInterval(index * elemsForThread, (index + 1) * elemsForThread, imgClone, isVerticalScan);
                             });
                         }
                         threads[i].Start();
@@ -190,39 +256,33 @@ namespace ImageHistogram
                     {
                         thread.Join();
                     }
+                    mostFrequentIntensityThread.Join();
                     test.Stop();
                     toolStripStatusLabel3.Text = "Час обчислення: " + test.ElapsedMilliseconds;
                     for (int i = 0; i < threadCount; i++)
                     {
-                        for(int x = 0; x < paralelResults[i].GetLength(0); x++)
+                        for (int x = 0; x < paralelResults[i].GetLength(0); x++)
                         {
-                            //check -1
-                            for(int y= 0; y< paralelResults[i].GetLength(1)-1; y++)
+                            for (int y = 0; y < paralelResults[i].GetLength(1) - 1; y++)
                             {
-                                _histogramImage.SetPixel(i* elemsForThread + x, y, paralelResults[i][x, y]);
+                                if (y == mostFrequentIntensity + defectsThreshold || y == mostFrequentIntensity - defectsThreshold)
+                                {
+                                    _histogramImage.SetPixel(i * elemsForThread + x, y, Color.Aquamarine);
+                                    continue;
+                                }
+                                else if (paralelResults[i][x,y]!=Color.Black && (y > mostFrequentIntensity + defectsThreshold 
+                                    || y < mostFrequentIntensity - defectsThreshold))
+                                {
+                                    hasDefects = true;
+                                }
+                                _histogramImage.SetPixel(i * elemsForThread + x, y, paralelResults[i][x, y]);
                             }
                         }
                     }
                 }
+                //useles not paralel code
                 else
                 {
-                    Color[,] Results;
-                    Results = calcPositionInterval(0, width, _image);
-                    
-                    for (int x = 0; x < Results.GetLength(0); x++)
-                    {
-                        //check -1
-                        for (int y = 0; y < Results.GetLength(1) - 1; y++)
-                        {
-                            _histogramImage.SetPixel(x, y, Results[x, y]);
-                        }
-                    }
-
-                    pictureBox2.Image = _histogramImage;
-                    test.Stop();
-                    toolStripStatusLabel3.Text = "Час обчислення: " + test.ElapsedMilliseconds;
-
-                    return;
                     for (int x = 0; x < width; x++)
                     {
                         for (int i = 0; i < intensityIntervals; i++)
@@ -230,8 +290,107 @@ namespace ImageHistogram
                             int[] columnHistogram = new int[intensityRange];
                             double[] columnCumulativeHistogram = new double[intensityRange];
                             int pixelCount = 0;
-                            // Перебираємо рядки
                             for (int y = 0; y < height; y++)
+                            {
+                                Color pixelColor = _image.GetPixel(x, y);
+                                int brightness = (int)(pixelColor.R + pixelColor.G + pixelColor.B) / 3;
+
+                                if (brightness >= minimumIntensity && brightness <= maximumIntensity
+                                    && brightness >= i * intensityRange && brightness < (i + 1) * intensityRange)
+                                {
+                                    columnHistogram[brightness % intensityRange]++;
+                                    pixelCount++;
+                                }
+
+                            }
+                            double accumulator = 0;
+                            for (int brightness = 0; brightness < intensityRange; brightness++)
+                            {
+                                if (pixelCount == 0)
+                                {
+                                    _histogramImage.SetPixel(x, brightness + i * intensityRange, Color.FromArgb(0, 0, 0));
+                                    continue;
+                                }
+                                accumulator += columnHistogram[brightness];
+                                columnCumulativeHistogram[brightness] = (accumulator) / pixelCount;
+                                int colorValue = (int)(columnCumulativeHistogram[brightness] * 255);
+                                _histogramImage.SetPixel(x, brightness + i * intensityRange, Color.FromArgb(colorValue, colorValue, colorValue));
+                            }
+                        }
+                    }
+                }
+                test.Stop();
+                toolStripStatusLabel3.Text = "Час обчислення: " + test.ElapsedMilliseconds;
+            }
+            else
+            {
+                _histogramImage = new Bitmap((maximumIntensity - minimumIntensity), height);
+
+                if (isParalel)
+                {
+                    Color[][,] paralelResults = new Color[threadCount][,];
+                    Thread[] threads = new Thread[threadCount];
+                    int elemsForThread = height / threadCount;
+                    for (int i = 0; i < threadCount; ++i)
+                    {
+                        int index = i;
+                        Bitmap imgClone = (Bitmap)_image.Clone();
+                        if (i == threadCount - 1)
+                        {
+                            threads[i] = new Thread(() =>
+                            {
+                                paralelResults[index] = calcPositionInterval(index * elemsForThread, height, imgClone, isVerticalScan);
+                            });
+                        }
+                        else
+                        {
+                            threads[i] = new Thread(() =>
+                            {
+                                paralelResults[index] = calcPositionInterval(index * elemsForThread, (index + 1) * elemsForThread, imgClone, isVerticalScan);
+                            });
+                        }
+                        threads[i].Start();
+                    }
+                    foreach (Thread thread in threads)
+                    {
+                        thread.Join();
+                    }
+                    mostFrequentIntensityThread.Join();
+                    test.Stop();
+                    toolStripStatusLabel3.Text = "Час обчислення: " + test.ElapsedMilliseconds;
+                    for (int i = 0; i < threadCount; i++)
+                    {
+                        for (int x = 0; x < paralelResults[i].GetLength(0)-1; x++)
+                        {
+                            for (int y = 0; y < paralelResults[i].GetLength(1); y++)
+                            {
+                                if (x == mostFrequentIntensity + defectsThreshold || x == mostFrequentIntensity - defectsThreshold)
+                                {
+                                    _histogramImage.SetPixel(x, i * elemsForThread + y, Color.Aquamarine);
+                                    continue;
+                                }
+                                else if (paralelResults[i][x, y] != Color.Black && (x > mostFrequentIntensity + defectsThreshold
+                                    || x < mostFrequentIntensity - defectsThreshold))
+                                {
+                                    hasDefects = true;
+                                }
+                                _histogramImage.SetPixel(x, i * elemsForThread + y, paralelResults[i][x, y]);
+                            }
+                        }
+                    }
+                }
+                //Useless sequental code
+                else
+                {
+                    for (int y = 0; y < height; y++)
+                    {
+                        for (int i = 0; i < intensityIntervals; i++)
+                        {
+                            int[] columnHistogram = new int[intensityRange];
+                            double[] columnCumulativeHistogram = new double[intensityRange];
+                            int pixelCount = 0;
+                            // Перебираємо рядки
+                            for (int x = 0; x < width; x++)
                             {
                                 // Отримуємо кольор пікселя на позиції (x, y)
                                 Color pixelColor = _image.GetPixel(x, y);
@@ -253,71 +412,33 @@ namespace ImageHistogram
                             {
                                 if (pixelCount == 0)
                                 {
-                                    _histogramImage.SetPixel(x, brightness + i * intensityRange, Color.FromArgb(0, 0, 0));
+                                    _histogramImage.SetPixel(brightness + i * intensityRange, y, Color.FromArgb(0, 0, 0));
                                     continue;
                                 }
                                 accumulator += columnHistogram[brightness];
                                 columnCumulativeHistogram[brightness] = (accumulator) / pixelCount;
                                 int colorValue = (int)(columnCumulativeHistogram[brightness] * 255);
-                                _histogramImage.SetPixel(x, brightness + i * intensityRange, Color.FromArgb(colorValue, colorValue, colorValue));
+                                _histogramImage.SetPixel(brightness + i * intensityRange, y, Color.FromArgb(colorValue, colorValue, colorValue));
                             }
                         }
-
-                        toolStripProgressBar1.Value = (int)((double)x / width) * 100;
                     }
                 }
+
+                pictureBox2.Image = _histogramImage;
+                test.Stop();
+                toolStripStatusLabel3.Text = "Час обчислення: " + test.ElapsedMilliseconds;
+            }
+            if (hasDefects)
+            {
+                label5.Text = "ВИЯВЛЕНО ДЕФЕКТИ!";
+                label5.ForeColor = Color.Red;
             }
             else
             {
-                _histogramImage = new Bitmap((maximumIntensity - minimumIntensity), height);
-
-                for (int y = 0; y < height; y++)
-                {
-                    for (int i = 0; i < intensityIntervals; i++)
-                    {
-                        int[] columnHistogram = new int[intensityRange];
-                        double[] columnCumulativeHistogram = new double[intensityRange];
-                        int pixelCount = 0;
-                        // Перебираємо рядки
-                        for (int x = 0; x < width; x++)
-                        {
-                            // Отримуємо кольор пікселя на позиції (x, y)
-                            Color pixelColor = _image.GetPixel(x, y);
-
-                            // Обчислюємо яскравість пікселя (середнє значення кольорів)
-                            int brightness = (int)(pixelColor.R + pixelColor.G + pixelColor.B) / 3;
-
-                            if (brightness >= minimumIntensity && brightness <= maximumIntensity
-                                && brightness >= i * intensityRange && brightness < (i + 1) * intensityRange)
-                            {
-                                columnHistogram[brightness % intensityRange]++;
-                                pixelCount++;
-                            }
-                            // Оновлюємо гістограму для відповідної яскравості
-
-                        }
-                        double accumulator = 0;
-                        for (int brightness = 0; brightness < intensityRange; brightness++)
-                        {
-                            if (pixelCount == 0)
-                            {
-                                _histogramImage.SetPixel(brightness + i * intensityRange, y, Color.FromArgb(0, 0, 0));
-                                continue;
-                            }
-                            accumulator += columnHistogram[brightness];
-                            columnCumulativeHistogram[brightness] = (accumulator) / pixelCount;
-                            int colorValue = (int)(columnCumulativeHistogram[brightness] * 255);
-                            _histogramImage.SetPixel(brightness + i * intensityRange, y, Color.FromArgb(colorValue, colorValue, colorValue));
-                        }
-                    }
-
-                    toolStripProgressBar1.Value = (int)((double)y / height) * 100;
-                }
+                label5.Text = "Дефектів не виявлено";
+                label5.ForeColor = Color.Green;
             }
-
             pictureBox2.Image = _histogramImage;
-            test.Stop();
-            toolStripStatusLabel3.Text = "Час обчислення: "+test.ElapsedMilliseconds;
 
         }
 

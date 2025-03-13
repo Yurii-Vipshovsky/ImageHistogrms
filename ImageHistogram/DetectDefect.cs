@@ -1,62 +1,73 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Imaging;
-using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using System.Windows.Forms.DataVisualization.Charting;
 using static System.Net.Mime.MediaTypeNames;
 
 namespace ImageHistogram
 {
-    public partial class Form1 : Form
+    public class DefectDefectResult
     {
-        private Bitmap _image;
-        private Bitmap _histogramImage;
-        private bool isVerticalScan = true;
+        public bool hasDefect { get; set; }
+        public Bitmap result { get; set; }
+        public long time { get; set; }
+    }
+
+    internal class DetectDefectClass
+    {
+        int width;
+        int height;
+        int intensityIntervals;
+        int minimumIntensity;
+        int maximumIntensity;
+        int intensityRange;
+        int defectsThreshold;
+        private bool isVerticalScan;
         private int threadCount = 10;
         private bool isParalel = true;
-        public Form1()
+
+        public DetectDefectClass(int width, int height, int intensityIntervals, int minimumIntensity, int maximumIntensity, int defectsThreshold, bool isVerticalScan)
         {
-            InitializeComponent();
+            this.width = width;
+            this.height = height;
+            this.intensityIntervals = intensityIntervals;
+            this.minimumIntensity = minimumIntensity;
+            this.maximumIntensity = maximumIntensity;
+            this.intensityRange = (maximumIntensity - minimumIntensity) / intensityIntervals;
+            this.defectsThreshold = defectsThreshold;
+            this.isVerticalScan = isVerticalScan;
         }
 
-        private void openToolStripMenuItem_Click(object sender, EventArgs e)
+        private int calcMostFrequentIntensity(Bitmap image)
         {
-            if (openFileDialog1.ShowDialog() == DialogResult.OK)
+            int[] pixelCount = new int[maximumIntensity - minimumIntensity + 1];
+            for (int x = 0; x < width; x++)
             {
-                _image = new Bitmap(openFileDialog1.FileName);
-                pictureBox1.Image = _image;
-                int width = _image.Width;
-                int height = _image.Height;
+                for (int y = 0; y < height; y++)
+                {
+                    // Отримуємо кольор пікселя на позиції (x, y)
+                    Color pixelColor = image.GetPixel(x, y);
 
-                _histogramImage = new Bitmap(width, 256);
+                    // Обчислюємо яскравість пікселя (середнє значення кольорів)
+                    int brightness = (pixelColor.R + pixelColor.G + pixelColor.B) / 3;
 
-                toolStripStatusLabel1.Text = openFileDialog1.FileName;
+                    pixelCount[brightness] += 1;
 
-                toolStripStatusLabel2.Text = "Розширення: " + width + "х" + height;
-
+                }
             }
+            return Array.IndexOf(pixelCount, pixelCount.Max());
         }
 
         private Color[,] calcPositionInterval(int startPos, int endPos, Bitmap imageCopy, bool isVertical)
         {
-            int width = imageCopy.Width;
-            int height = imageCopy.Height;
-            int intensityIntervals = (int)numericUpDown1.Value;
-            int minimumIntensity = (int)numericUpDown2.Value;
-            int maximumIntensity = (int)numericUpDown3.Value;
-            int intensityRange = (maximumIntensity - minimumIntensity) / intensityIntervals;
             if (isVertical)
             {
-                Color[,] res = new Color[endPos - startPos, (maximumIntensity - minimumIntensity)+1];
+                Color[,] res = new Color[endPos - startPos, (maximumIntensity - minimumIntensity) + 1];
                 if (intensityIntervals == 255)
                 {
                     for (int x = 0; x < endPos - startPos; ++x)
@@ -121,7 +132,7 @@ namespace ImageHistogram
             }
             else
             {
-                Color[,] res = new Color[(maximumIntensity - minimumIntensity)+1, endPos - startPos];
+                Color[,] res = new Color[(maximumIntensity - minimumIntensity) + 1, endPos - startPos];
                 if (intensityIntervals == 255)
                 {
                     for (int y = 0; y < endPos - startPos; ++y)
@@ -136,7 +147,7 @@ namespace ImageHistogram
                         for (int x = 0; x < width; x++)
                         {
                             Color pixelColor = imageCopy.GetPixel(x, y);
-                            res[(int)(pixelColor.R + pixelColor.G + pixelColor.B) / 3, y-startPos] = Color.White;
+                            res[(int)(pixelColor.R + pixelColor.G + pixelColor.B) / 3, y - startPos] = Color.White;
 
                         }
                     }
@@ -178,7 +189,7 @@ namespace ImageHistogram
                             accumulator += columnHistogram[brightness];
                             columnCumulativeHistogram[brightness] = (accumulator) / pixelCount;
                             int colorValue = (int)(columnCumulativeHistogram[brightness] * 255);
-                            res[brightness + i * intensityRange, y-startPos] = Color.FromArgb(colorValue, colorValue, colorValue);
+                            res[brightness + i * intensityRange, y - startPos] = Color.FromArgb(colorValue, colorValue, colorValue);
                         }
                     }
                 }
@@ -186,40 +197,9 @@ namespace ImageHistogram
             }
         }
 
-        private int calcMostFrequentIntensity(Bitmap image)
-        {
-            int width = image.Width;
-            int height = image.Height;
-            int minimumIntensity = (int)numericUpDown2.Value;
-            int maximumIntensity = (int)numericUpDown3.Value;
-            int[] pixelCount = new int[maximumIntensity-minimumIntensity+1];
-            for (int x = 0; x < width; x++)
-            {
-                for (int y = 0; y < height; y++)
-                {
-                    // Отримуємо кольор пікселя на позиції (x, y)
-                    Color pixelColor = image.GetPixel(x, y);
-
-                    // Обчислюємо яскравість пікселя (середнє значення кольорів)
-                    int brightness = (pixelColor.R + pixelColor.G + pixelColor.B) / 3;
-
-                    pixelCount[brightness] += 1;
-
-                }
-            }
-            return Array.IndexOf(pixelCount, pixelCount.Max());
-        }
-
-        private void button1_Click(object sender, EventArgs e)
+        public DefectDefectResult DetectDefect(Bitmap _image, Bitmap _histogramImage)
         {
             var test = Stopwatch.StartNew();
-            int width = _image.Width;
-            int height = _image.Height;
-            int intensityIntervals = (int)numericUpDown1.Value;
-            int minimumIntensity = (int)numericUpDown2.Value;
-            int maximumIntensity = (int)numericUpDown3.Value;
-            int intensityRange = (maximumIntensity-minimumIntensity) / intensityIntervals;
-            int defectsThreshold = ((int)numericUpDown4.Value * (maximumIntensity - minimumIntensity))/100;
             int mostFrequentIntensity = 0;
             bool hasDefects = false;
             Thread mostFrequentIntensityThread = new Thread(() => { mostFrequentIntensity = calcMostFrequentIntensity((Bitmap)_image.Clone()); });
@@ -259,7 +239,7 @@ namespace ImageHistogram
                     }
                     mostFrequentIntensityThread.Join();
                     test.Stop();
-                    toolStripStatusLabel3.Text = "Час обчислення: " + test.ElapsedMilliseconds;
+                    //toolStripStatusLabel3.Text = "Час обчислення: " + test.ElapsedMilliseconds;
                     for (int i = 0; i < threadCount; i++)
                     {
                         for (int x = 0; x < paralelResults[i].GetLength(0); x++)
@@ -271,7 +251,7 @@ namespace ImageHistogram
                                     _histogramImage.SetPixel(i * elemsForThread + x, y, Color.Aquamarine);
                                     continue;
                                 }
-                                else if (paralelResults[i][x,y]!=Color.Black && (y > mostFrequentIntensity + defectsThreshold 
+                                else if (paralelResults[i][x, y] != Color.Black && (y > mostFrequentIntensity + defectsThreshold
                                     || y < mostFrequentIntensity - defectsThreshold))
                                 {
                                     hasDefects = true;
@@ -321,7 +301,8 @@ namespace ImageHistogram
                     }
                 }
                 test.Stop();
-                toolStripStatusLabel3.Text = "Час обчислення: " + test.ElapsedMilliseconds;
+                //toolStripStatusLabel3.Text = "Час обчислення: " + test.ElapsedMilliseconds;
+                return new DefectDefectResult { hasDefect = hasDefects, result = _histogramImage, time = test.ElapsedMilliseconds };
             }
             else
             {
@@ -358,10 +339,10 @@ namespace ImageHistogram
                     }
                     mostFrequentIntensityThread.Join();
                     test.Stop();
-                    toolStripStatusLabel3.Text = "Час обчислення: " + test.ElapsedMilliseconds;
+                    //toolStripStatusLabel3.Text = "Час обчислення: " + test.ElapsedMilliseconds;
                     for (int i = 0; i < threadCount; i++)
                     {
-                        for (int x = 0; x < paralelResults[i].GetLength(0)-1; x++)
+                        for (int x = 0; x < paralelResults[i].GetLength(0) - 1; x++)
                         {
                             for (int y = 0; y < paralelResults[i].GetLength(1); y++)
                             {
@@ -425,179 +406,11 @@ namespace ImageHistogram
                     }
                 }
 
-                pictureBox2.Image = _histogramImage;
+                //pictureBox2.Image = _histogramImage;
                 test.Stop();
-                toolStripStatusLabel3.Text = "Час обчислення: " + test.ElapsedMilliseconds;
-            }
-            if (hasDefects)
-            {
-                label5.Text = "ВИЯВЛЕНО ДЕФЕКТИ!";
-                label5.ForeColor = Color.Red;
-            }
-            else
-            {
-                label5.Text = "Дефектів не виявлено";
-                label5.ForeColor = Color.Green;
-            }
-            pictureBox2.Image = _histogramImage;
-
-        }
-
-        private void grayscaleToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            for(int x=0; x < _image.Width; x++)
-            {
-                for(int y=0; y < _image.Height; y++)
-                {
-                    Color oc = _image.GetPixel(x, y);
-                    int grayScale = (int)((oc.R * 0.3) + (oc.G * 0.59) + (oc.B * 0.11));
-                    Color nc = Color.FromArgb(oc.A, grayScale, grayScale, grayScale);
-                    _image.SetPixel(x, y, nc);
-                }
-            }
-            pictureBox1.Image = _image;
-        }
-
-        private void saveImageToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (saveFileDialog1.ShowDialog() == DialogResult.OK)
-            {
-                    // Code to write the stream goes here.
-                string filePath = saveFileDialog1.FileName;
-                _image.Save(filePath); // Збереження зображення
-                Console.WriteLine($"Зображення збережено в {filePath}");
+                //toolStripStatusLabel3.Text = "Час обчислення: " + test.ElapsedMilliseconds;
+                return new DefectDefectResult { hasDefect = hasDefects, result = _histogramImage, time = test.ElapsedMilliseconds };
             }
         }
-
-        private void saveResultToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (saveFileDialog1.ShowDialog() == DialogResult.OK)
-            {
-                // Code to write the stream goes here.
-                string filePath = saveFileDialog1.FileName;
-                _histogramImage.Save(filePath); // Збереження зображення
-                Console.WriteLine($"Зображення збережено в {filePath}");
-            }
-        }
-
-        private void exitToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            this.Close();
-        }
-
-        private void verticalScanToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            horizontalScanToolStripMenuItem.Checked = false;
-            isVerticalScan = true;
-        }
-
-        private void horizontalScanToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            verticalScanToolStripMenuItem.Checked = false;
-            isVerticalScan = false;
-        }
-
-        private List<ImageAnalysisResult> _analysisResults = new List<ImageAnalysisResult>();
-
-        private void openManyToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            _analysisResults.Clear();
-            int minimumIntensity = (int)numericUpDown2.Value;
-            int maximumIntensity = (int)numericUpDown3.Value;
-            
-
-            using (OpenFileDialog ofd = new OpenFileDialog())
-            {
-                ofd.Multiselect = true;
-                ofd.Filter = "Image Files|*.jpg;*.jpeg;*.png;*.bmp;*.tif;*.tiff";
-
-                if (ofd.ShowDialog() == DialogResult.OK)
-                {
-                    var test = Stopwatch.StartNew();
-                    foreach (string filePath in ofd.FileNames)
-                    {
-                        // Істинна наявність дефекту визначається з назви файлу
-                        bool isDefectedInName = filePath.IndexOf("Defected", StringComparison.OrdinalIgnoreCase) >= 0;
-
-                        // Завантажуємо зображення (Bitmap) і проганяємо через алгоритм
-                        try
-                        {
-                            using (Bitmap bmp = new Bitmap(filePath))
-                            {
-                                DetectDefectClass detect = new DetectDefectClass(
-                                bmp.Width,
-                                bmp.Height,
-                                (int)numericUpDown1.Value,
-                                minimumIntensity,
-                                maximumIntensity,
-                                ((int)numericUpDown4.Value * (maximumIntensity - minimumIntensity)) / 100,
-                                isVerticalScan
-                                );
-
-                                DefectDefectResult detectedByAlgorithm = detect.DetectDefect(bmp, _histogramImage);
-
-                                // Порівняння справжньої наявності і передбачення алгоритму
-                                bool isCorrect = (isDefectedInName == detectedByAlgorithm.hasDefect);
-
-                                // Зберігаємо результат
-                                _analysisResults.Add(new ImageAnalysisResult
-                                {
-                                    FileName = Path.GetFileName(filePath),
-                                    IsDefectedInName = isDefectedInName,
-                                    DetectedByAlgorithm = detectedByAlgorithm.hasDefect,
-                                    IsCorrect = isCorrect
-                                });
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            MessageBox.Show($"Помилка читання файлу {Path.GetFileName(filePath)}: {ex.Message}");
-                        }
-                    }
-                    test.Stop();
-                    toolStripStatusLabel3.Text = "Час обчислення: " + test.ElapsedMilliseconds;
-                    // Після завантаження всіх зображень — можна зберегти результати у файл і/або показати на формі
-                    SaveAnalysisResultsToFile("AnalysisResults.csv");
-                    MessageBox.Show("Аналіз завершено. Результати записано у AnalysisResults.csv");
-                }
-            }
-        }
-
-        private void SaveAnalysisResultsToFile(string outputFilePath)
-        {
-            try
-            {
-                using (StreamWriter writer = new StreamWriter(outputFilePath))
-                {
-                    // Заголовок CSV
-                    writer.WriteLine("FileName,HasDefectInName,DetectedByAlgorithm,IsCorrect");
-
-                    int correctCount = 0;
-
-                    // Проходимося по результатах
-                    foreach (var res in _analysisResults)
-                    {
-                        writer.WriteLine($"{res.FileName},{res.IsDefectedInName},{res.DetectedByAlgorithm},{res.IsCorrect}");
-                        if (res.IsCorrect) correctCount++;
-                    }
-
-                    // Обчислюємо точність
-                    double accuracy = 0;
-                    if (_analysisResults.Count > 0)
-                    {
-                        accuracy = (double)correctCount / _analysisResults.Count * 100.0;
-                    }
-
-                    // Додаємо в кінець файлу загальну точність
-                    writer.WriteLine();
-                    writer.WriteLine($"Accuracy: {accuracy:F2}%");
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Помилка запису файлу: {ex.Message}");
-            }
-        }
-
     }
 }

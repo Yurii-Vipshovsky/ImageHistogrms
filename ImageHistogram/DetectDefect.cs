@@ -202,7 +202,8 @@ namespace ImageHistogram
             var test = Stopwatch.StartNew();
             int mostFrequentIntensity = 0;
             bool hasDefects = false;
-            Thread mostFrequentIntensityThread = new Thread(() => { mostFrequentIntensity = calcMostFrequentIntensity((Bitmap)_image.Clone()); });
+            Bitmap clone = (Bitmap)_image.Clone();
+            Thread mostFrequentIntensityThread = new Thread(() => { mostFrequentIntensity = calcMostFrequentIntensity(clone); });
             mostFrequentIntensityThread.Start();
             if (isVerticalScan)
             {

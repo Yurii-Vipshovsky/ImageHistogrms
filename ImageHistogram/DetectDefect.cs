@@ -1,13 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Threading;
+using System.Drawing.Imaging;
 using System.Threading.Tasks;
-using System.Windows.Forms;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace ImageHistogram
 {
@@ -20,398 +15,256 @@ namespace ImageHistogram
 
     internal class DetectDefectClass
     {
-        int width;
-        int height;
-        int intensityIntervals;
-        int minimumIntensity;
-        int maximumIntensity;
-        int intensityRange;
-        int defectsThreshold;
-        private bool isVerticalScan;
-        private int threadCount = 10;
-        private bool isParalel = true;
+        private int _width;
+        private int _height;
+        private int _intensityIntervals;
+        private int _minimumIntensity;
+        private int _maximumIntensity;
+        private int _intensityRange;
+        private int _defectsThreshold;
+        private bool _isVerticalScan;
 
         public DetectDefectClass(int width, int height, int intensityIntervals, int minimumIntensity, int maximumIntensity, int defectsThreshold, bool isVerticalScan)
         {
-            this.width = width;
-            this.height = height;
-            this.intensityIntervals = intensityIntervals;
-            this.minimumIntensity = minimumIntensity;
-            this.maximumIntensity = maximumIntensity;
-            this.intensityRange = (maximumIntensity - minimumIntensity) / intensityIntervals;
-            this.defectsThreshold = defectsThreshold;
-            this.isVerticalScan = isVerticalScan;
+            _width = width;
+            _height = height;
+            _intensityIntervals = intensityIntervals;
+            _minimumIntensity = minimumIntensity;
+            _maximumIntensity = maximumIntensity;
+            _intensityRange = (_maximumIntensity - _minimumIntensity) / (intensityIntervals > 0 ? intensityIntervals : 1);
+            if (_intensityRange == 0) _intensityRange = 1;
+            _defectsThreshold = defectsThreshold;
+            _isVerticalScan = isVerticalScan;
         }
 
-        private int calcMostFrequentIntensity(Bitmap image)
+        // Швидкий розрахунок піку
+        private unsafe int CalcMostFrequentIntensity(BitmapData data)
         {
-            int[] pixelCount = new int[maximumIntensity - minimumIntensity + 1];
-            for (int x = 0; x < width; x++)
+            int[] histogram = new int[256];
+            byte* scan0 = (byte*)data.Scan0;
+            int stride = data.Stride;
+            int bpp = 3; // bpp - bytes per pixel - 24 bits ber pixel assumed (8bit per chanel)
+
+            Parallel.For(0, _height, y =>
             {
-                for (int y = 0; y < height; y++)
+                // for each thread lockal Histogram
+                int[] localHist = new int[256];
+                // move to y row using pointers
+                byte* row = scan0 + (y * stride);
+                for (int x = 0; x < _width; x++)
                 {
-                    // Отримуємо кольор пікселя на позиції (x, y)
-                    Color pixelColor = image.GetPixel(x, y);
+                    // BGR - Blue Green Red - Windows save image data in this way
+                    // Color image analys
+                    //int val = (row[x * bpp] + row[x * bpp + 1] + row[x * bpp + 2]) / 3;
 
-                    // Обчислюємо яскравість пікселя (середнє значення кольорів)
-                    int brightness = (pixelColor.R + pixelColor.G + pixelColor.B) / 3;
-
-                    pixelCount[brightness] += 1;
-
+                    //Grey image analys 
+                    int val = row[x * bpp];
+                    localHist[val]++;
                 }
+                lock (histogram)
+                {
+                    for (int i = 0; i < 256; i++) histogram[i] += localHist[i];
+                }
+            });
+
+            int maxVal = -1, maxIdx = 0;
+            int end = Math.Min(_maximumIntensity, 255);
+            int start = Math.Max(_minimumIntensity, 0);
+
+            for (int i = start; i <= end; i++)
+            {
+                if (histogram[i] > maxVal) { maxVal = histogram[i]; maxIdx = i; }
             }
-            return Array.IndexOf(pixelCount, pixelCount.Max());
+            return maxIdx;
         }
 
-        private Color[,] calcPositionInterval(int startPos, int endPos, Bitmap imageCopy, bool isVertical)
+        public unsafe DefectDefectResult DetectDefect(Bitmap sourceImage, Bitmap _unusedHistogram)
         {
-            if (isVertical)
-            {
-                Color[,] res = new Color[endPos - startPos, (maximumIntensity - minimumIntensity) + 1];
-                if (intensityIntervals == 255)
-                {
-                    for (int x = 0; x < endPos - startPos; ++x)
-                    {
-                        for (int y = 0; y < 256; ++y)
-                        {
-                            res[x, y] = Color.Black;
-                        }
-                    }
-                    for (int x = startPos; x < endPos; x++)
-                    {
-                        for (int y = 0; y < height; ++y)
-                        {
-                            Color pixelColor = imageCopy.GetPixel(x, y);
-                            res[x - startPos, (int)(pixelColor.R + pixelColor.G + pixelColor.B) / 3] = Color.White;
-
-                        }
-                    }
-                    return res;
-                }
-                for (int x = startPos; x < endPos; x++)
-                {
-                    for (int i = 0; i < intensityIntervals; i++)
-                    {
-                        int[] columnHistogram = new int[intensityRange];
-                        double[] columnCumulativeHistogram = new double[intensityRange];
-                        int pixelCount = 0;
-                        // Перебираємо рядки
-                        for (int y = 0; y < height; y++)
-                        {
-                            // Отримуємо кольор пікселя на позиції (x, y)
-                            Color pixelColor = imageCopy.GetPixel(x, y);
-
-                            // Обчислюємо яскравість пікселя (середнє значення кольорів)
-                            int brightness = (int)(pixelColor.R + pixelColor.G + pixelColor.B) / 3;
-
-                            if (brightness >= minimumIntensity && brightness <= maximumIntensity
-                                && brightness >= i * intensityRange && brightness < (i + 1) * intensityRange)
-                            {
-                                columnHistogram[brightness % intensityRange]++;
-                                pixelCount++;
-                            }
-                            // Оновлюємо гістограму для відповідної яскравості
-
-                        }
-                        double accumulator = 0;
-                        for (int brightness = 0; brightness < intensityRange; brightness++)
-                        {
-                            if (pixelCount == 0)
-                            {
-                                res[x - startPos, brightness + i * intensityRange] = Color.Black;
-                                continue;
-                            }
-                            accumulator += columnHistogram[brightness];
-                            columnCumulativeHistogram[brightness] = (accumulator) / pixelCount;
-                            int colorValue = (int)(columnCumulativeHistogram[brightness] * 255);
-                            res[x - startPos, brightness + i * intensityRange] = Color.FromArgb(colorValue, colorValue, colorValue);
-                        }
-                    }
-                }
-                return res;
-            }
-            else
-            {
-                Color[,] res = new Color[(maximumIntensity - minimumIntensity) + 1, endPos - startPos];
-                if (intensityIntervals == 255)
-                {
-                    for (int y = 0; y < endPos - startPos; ++y)
-                    {
-                        for (int x = 0; x < 256; ++x)
-                        {
-                            res[x, y] = Color.Black;
-                        }
-                    }
-                    for (int y = startPos; y < endPos; y++)
-                    {
-                        for (int x = 0; x < width; x++)
-                        {
-                            Color pixelColor = imageCopy.GetPixel(x, y);
-                            res[(int)(pixelColor.R + pixelColor.G + pixelColor.B) / 3, y - startPos] = Color.White;
-
-                        }
-                    }
-                    return res;
-                }
-                for (int y = startPos; y < endPos; y++)
-                {
-                    for (int i = 0; i < intensityIntervals; i++)
-                    {
-                        int[] columnHistogram = new int[intensityRange];
-                        double[] columnCumulativeHistogram = new double[intensityRange];
-                        int pixelCount = 0;
-                        // Перебираємо рядки
-                        for (int x = 0; x < width; x++)
-                        {
-                            // Отримуємо кольор пікселя на позиції (x, y)
-                            Color pixelColor = imageCopy.GetPixel(x, y);
-
-                            // Обчислюємо яскравість пікселя (середнє значення кольорів)
-                            int brightness = (int)(pixelColor.R + pixelColor.G + pixelColor.B) / 3;
-
-                            if (brightness >= minimumIntensity && brightness <= maximumIntensity
-                                && brightness >= i * intensityRange && brightness < (i + 1) * intensityRange)
-                            {
-                                columnHistogram[brightness % intensityRange]++;
-                                pixelCount++;
-                            }
-                            // Оновлюємо гістограму для відповідної яскравості
-
-                        }
-                        double accumulator = 0;
-                        for (int brightness = 0; brightness < intensityRange; brightness++)
-                        {
-                            if (pixelCount == 0)
-                            {
-                                res[brightness + i * intensityRange, y - startPos] = Color.Black;
-                                continue;
-                            }
-                            accumulator += columnHistogram[brightness];
-                            columnCumulativeHistogram[brightness] = (accumulator) / pixelCount;
-                            int colorValue = (int)(columnCumulativeHistogram[brightness] * 255);
-                            res[brightness + i * intensityRange, y - startPos] = Color.FromArgb(colorValue, colorValue, colorValue);
-                        }
-                    }
-                }
-                return res;
-            }
-        }
-
-        public DefectDefectResult DetectDefect(Bitmap _image, Bitmap _histogramImage)
-        {
-            var test = Stopwatch.StartNew();
-            int mostFrequentIntensity = 0;
+            Stopwatch sw = Stopwatch.StartNew();
             bool hasDefects = false;
-            Bitmap clone = (Bitmap)_image.Clone();
-            Thread mostFrequentIntensityThread = new Thread(() => { mostFrequentIntensity = calcMostFrequentIntensity(clone); });
-            mostFrequentIntensityThread.Start();
-            if (isVerticalScan)
-            {
-                _histogramImage = new Bitmap(width, (maximumIntensity - minimumIntensity));
 
-                if (isParalel)
+            // Розміри результату
+            int resWidth = _isVerticalScan ? _width : (_maximumIntensity - _minimumIntensity);
+            int resHeight = _isVerticalScan ? (_maximumIntensity - _minimumIntensity) : _height;
+            if (resWidth <= 0) resWidth = 1;
+            if (resHeight <= 0) resHeight = 1;
+
+            Bitmap resultBmp = new Bitmap(resWidth, resHeight, PixelFormat.Format24bppRgb);
+
+            // Блокування пам'яті (LockBits)
+            BitmapData srcData = sourceImage.LockBits(new Rectangle(0, 0, _width, _height), ImageLockMode.ReadOnly, PixelFormat.Format24bppRgb);
+            BitmapData resData = resultBmp.LockBits(new Rectangle(0, 0, resWidth, resHeight), ImageLockMode.WriteOnly, PixelFormat.Format24bppRgb);
+
+            try
+            {
+                int mostFreq = CalcMostFrequentIntensity(srcData);
+
+                byte* srcPtr = (byte*)srcData.Scan0;
+                byte* resPtr = (byte*)resData.Scan0;
+                int srcStride = srcData.Stride;
+                int resStride = resData.Stride;
+
+                // Константи для циклу
+                int minI = _minimumIntensity;
+                int maxI = _maximumIntensity;
+                int range = _intensityRange;
+                int intervals = _intensityIntervals;
+                int threshold = _defectsThreshold;
+                int lowBound = mostFreq - threshold;
+                int highBound = mostFreq + threshold;
+
+                // Використовуємо byte для прапорця, щоб уникнути lock у циклі (Interlocked повільний)
+                // 0 = false, 1 = true
+                int defectFlag = 0;
+
+                if (_isVerticalScan)
                 {
-                    Color[][,] paralelResults = new Color[threadCount][,];
-                    Thread[] threads = new Thread[threadCount];
-                    int elemsForThread = width / threadCount;
-                    for (int i = 0; i < threadCount; ++i)
+                    // === ВЕРТИКАЛЬНИЙ СКАН ===
+                    // Проходимо по X (ширині)
+                    Parallel.For(0, _width, x =>
                     {
-                        int index = i;
-                        Bitmap imgClone = (Bitmap)_image.Clone();
-                        if (i == threadCount - 1)
+                        // 1. Збираємо гістограму ВСЬОГО стовпця за ОДИН прохід
+                        int* colHist = stackalloc int[256]; // Швидкий масив на стеку
+                        // (stackalloc потребує unsafe, але це супершвидко і не навантажує GC)
+                        // Треба занулити, бо stackalloc може мати сміття
+                        for (int k = 0; k < 256; k++) colHist[k] = 0;
+
+                        byte* pixelAddr;
+                        for (int y = 0; y < _height; y++)
                         {
-                            threads[i] = new Thread(() =>
-                            {
-                                paralelResults[index] = calcPositionInterval(index * elemsForThread, width, imgClone, isVerticalScan);
-                            });
+                            pixelAddr = srcPtr + (y * srcStride) + (x * 3);
+                            int val = (pixelAddr[0] + pixelAddr[1] + pixelAddr[2]) / 3;
+                            colHist[val]++;
                         }
-                        else
+
+                        // 2. Тепер проходимо лише по інтервалах і малюємо результат
+                        // Тут немає циклу по _height, тому це миттєво
+                        for (int i = 0; i < intervals; i++)
                         {
-                            threads[i] = new Thread(() =>
+                            int startRange = i * range;
+                            int endRange = (i + 1) * range;
+
+                            int pixelCountInInterval = 0;
+                            // Рахуємо суму пікселів у цьому діапазоні (швидко, бо діапазон малий)
+                            for (int val = startRange; val < endRange; val++)
                             {
-                                paralelResults[index] = calcPositionInterval(index * elemsForThread, (index + 1) * elemsForThread, imgClone, isVerticalScan);
-                            });
-                        }
-                        threads[i].Start();
-                    }
-                    foreach (Thread thread in threads)
-                    {
-                        thread.Join();
-                    }
-                    mostFrequentIntensityThread.Join();
-                    test.Stop();
-                    //toolStripStatusLabel3.Text = "Час обчислення: " + test.ElapsedMilliseconds;
-                    for (int i = 0; i < threadCount; i++)
-                    {
-                        for (int x = 0; x < paralelResults[i].GetLength(0); x++)
-                        {
-                            for (int y = 0; y < paralelResults[i].GetLength(1) - 1; y++)
+                                if (val >= minI && val <= maxI)
+                                    pixelCountInInterval += colHist[val];
+                            }
+
+                            if (pixelCountInInterval == 0) continue; // Залишаємо чорним
+
+                            double accumulator = 0;
+                            for (int b = 0; b < range; b++)
                             {
-                                if (y == mostFrequentIntensity + defectsThreshold || y == mostFrequentIntensity - defectsThreshold)
+                                int intensity = b + startRange; // Це координата Y на картинці результату
+                                if (intensity >= resHeight) continue; // Захист
+
+                                byte* resPixel = resPtr + (intensity * resStride) + (x * 3);
+
+                                // Малюємо межі
+                                if (intensity == highBound || intensity == lowBound)
                                 {
-                                    _histogramImage.SetPixel(i * elemsForThread + x, y, Color.Aquamarine);
+                                    resPixel[0] = 212; resPixel[1] = 255; resPixel[2] = 127;
                                     continue;
                                 }
-                                else if (paralelResults[i][x, y] != Color.Black && (y > mostFrequentIntensity + defectsThreshold
-                                    || y < mostFrequentIntensity - defectsThreshold))
+
+                                // Ваша логіка накопичення
+                                if (intensity >= minI && intensity <= maxI)
                                 {
-                                    hasDefects = true;
+                                    accumulator += colHist[intensity];
+                                    byte colorVal = (byte)((accumulator / pixelCountInInterval) * 255);
+
+                                    resPixel[0] = colorVal;
+                                    resPixel[1] = colorVal;
+                                    resPixel[2] = colorVal;
+
+                                    // Перевірка дефекту
+                                    if (colorVal > 0 && (intensity > highBound || intensity < lowBound))
+                                    {
+                                        defectFlag = 1;
+                                    }
                                 }
-                                _histogramImage.SetPixel(i * elemsForThread + x, y, paralelResults[i][x, y]);
                             }
                         }
-                    }
+                    });
                 }
-                //useles not paralel code
                 else
                 {
-                    for (int x = 0; x < width; x++)
+                    // === ГОРИЗОНТАЛЬНИЙ СКАН ===
+                    // Проходимо по Y (висоті) джерела
+                    Parallel.For(0, _height, ySrc =>
                     {
-                        for (int i = 0; i < intensityIntervals; i++)
+                        int* rowHist = stackalloc int[256];
+                        for (int k = 0; k < 256; k++) rowHist[k] = 0;
+
+                        // 1. Гістограма рядка за один прохід
+                        byte* rowPtr = srcPtr + (ySrc * srcStride);
+                        for (int x = 0; x < _width; x++)
                         {
-                            int[] columnHistogram = new int[intensityRange];
-                            double[] columnCumulativeHistogram = new double[intensityRange];
-                            int pixelCount = 0;
-                            for (int y = 0; y < height; y++)
+                            int val = (rowPtr[x * 3] + rowPtr[x * 3 + 1] + rowPtr[x * 3 + 2]) / 3;
+                            rowHist[val]++;
+                        }
+
+                        // 2. Малюємо результат
+                        for (int i = 0; i < intervals; i++)
+                        {
+                            int startRange = i * range;
+                            int endRange = (i + 1) * range;
+
+                            int pixelCountInInterval = 0;
+                            for (int val = startRange; val < endRange; val++)
                             {
-                                Color pixelColor = _image.GetPixel(x, y);
-                                int brightness = (int)(pixelColor.R + pixelColor.G + pixelColor.B) / 3;
-
-                                if (brightness >= minimumIntensity && brightness <= maximumIntensity
-                                    && brightness >= i * intensityRange && brightness < (i + 1) * intensityRange)
-                                {
-                                    columnHistogram[brightness % intensityRange]++;
-                                    pixelCount++;
-                                }
-
+                                if (val >= minI && val <= maxI)
+                                    pixelCountInInterval += rowHist[val];
                             }
+
+                            if (pixelCountInInterval == 0) continue;
+
                             double accumulator = 0;
-                            for (int brightness = 0; brightness < intensityRange; brightness++)
+                            for (int b = 0; b < range; b++)
                             {
-                                if (pixelCount == 0)
+                                int intensity = b + startRange; // Це координата X на картинці результату
+                                if (intensity >= resWidth) continue;
+
+                                byte* resPixel = resPtr + (ySrc * resStride) + (intensity * 3);
+
+                                if (intensity == highBound || intensity == lowBound)
                                 {
-                                    _histogramImage.SetPixel(x, brightness + i * intensityRange, Color.FromArgb(0, 0, 0));
+                                    resPixel[0] = 212; resPixel[1] = 255; resPixel[2] = 127;
                                     continue;
                                 }
-                                accumulator += columnHistogram[brightness];
-                                columnCumulativeHistogram[brightness] = (accumulator) / pixelCount;
-                                int colorValue = (int)(columnCumulativeHistogram[brightness] * 255);
-                                _histogramImage.SetPixel(x, brightness + i * intensityRange, Color.FromArgb(colorValue, colorValue, colorValue));
+
+                                if (intensity >= minI && intensity <= maxI)
+                                {
+                                    accumulator += rowHist[intensity];
+                                    byte colorVal = (byte)((accumulator / pixelCountInInterval) * 255);
+
+                                    resPixel[0] = colorVal;
+                                    resPixel[1] = colorVal;
+                                    resPixel[2] = colorVal;
+
+                                    if (colorVal > 0 && (intensity > highBound || intensity < lowBound))
+                                    {
+                                        defectFlag = 1;
+                                    }
+                                }
                             }
                         }
-                    }
+                    });
                 }
-                test.Stop();
-                //toolStripStatusLabel3.Text = "Час обчислення: " + test.ElapsedMilliseconds;
-                return new DefectDefectResult { hasDefect = hasDefects, result = _histogramImage, time = test.ElapsedMilliseconds };
+
+                if (defectFlag == 1) hasDefects = true;
+
             }
-            else
+            finally
             {
-                _histogramImage = new Bitmap((maximumIntensity - minimumIntensity), height);
-
-                if (isParalel)
-                {
-                    Color[][,] paralelResults = new Color[threadCount][,];
-                    Thread[] threads = new Thread[threadCount];
-                    int elemsForThread = height / threadCount;
-                    for (int i = 0; i < threadCount; ++i)
-                    {
-                        int index = i;
-                        Bitmap imgClone = (Bitmap)_image.Clone();
-                        if (i == threadCount - 1)
-                        {
-                            threads[i] = new Thread(() =>
-                            {
-                                paralelResults[index] = calcPositionInterval(index * elemsForThread, height, imgClone, isVerticalScan);
-                            });
-                        }
-                        else
-                        {
-                            threads[i] = new Thread(() =>
-                            {
-                                paralelResults[index] = calcPositionInterval(index * elemsForThread, (index + 1) * elemsForThread, imgClone, isVerticalScan);
-                            });
-                        }
-                        threads[i].Start();
-                    }
-                    foreach (Thread thread in threads)
-                    {
-                        thread.Join();
-                    }
-                    mostFrequentIntensityThread.Join();
-                    test.Stop();
-                    //toolStripStatusLabel3.Text = "Час обчислення: " + test.ElapsedMilliseconds;
-                    for (int i = 0; i < threadCount; i++)
-                    {
-                        for (int x = 0; x < paralelResults[i].GetLength(0) - 1; x++)
-                        {
-                            for (int y = 0; y < paralelResults[i].GetLength(1); y++)
-                            {
-                                if (x == mostFrequentIntensity + defectsThreshold || x == mostFrequentIntensity - defectsThreshold)
-                                {
-                                    _histogramImage.SetPixel(x, i * elemsForThread + y, Color.Aquamarine);
-                                    continue;
-                                }
-                                else if (paralelResults[i][x, y] != Color.Black && (x > mostFrequentIntensity + defectsThreshold
-                                    || x < mostFrequentIntensity - defectsThreshold))
-                                {
-                                    hasDefects = true;
-                                }
-                                _histogramImage.SetPixel(x, i * elemsForThread + y, paralelResults[i][x, y]);
-                            }
-                        }
-                    }
-                }
-                //Useless sequental code
-                else
-                {
-                    for (int y = 0; y < height; y++)
-                    {
-                        for (int i = 0; i < intensityIntervals; i++)
-                        {
-                            int[] columnHistogram = new int[intensityRange];
-                            double[] columnCumulativeHistogram = new double[intensityRange];
-                            int pixelCount = 0;
-                            // Перебираємо рядки
-                            for (int x = 0; x < width; x++)
-                            {
-                                // Отримуємо кольор пікселя на позиції (x, y)
-                                Color pixelColor = _image.GetPixel(x, y);
-
-                                // Обчислюємо яскравість пікселя (середнє значення кольорів)
-                                int brightness = (int)(pixelColor.R + pixelColor.G + pixelColor.B) / 3;
-
-                                if (brightness >= minimumIntensity && brightness <= maximumIntensity
-                                    && brightness >= i * intensityRange && brightness < (i + 1) * intensityRange)
-                                {
-                                    columnHistogram[brightness % intensityRange]++;
-                                    pixelCount++;
-                                }
-                                // Оновлюємо гістограму для відповідної яскравості
-
-                            }
-                            double accumulator = 0;
-                            for (int brightness = 0; brightness < intensityRange; brightness++)
-                            {
-                                if (pixelCount == 0)
-                                {
-                                    _histogramImage.SetPixel(brightness + i * intensityRange, y, Color.FromArgb(0, 0, 0));
-                                    continue;
-                                }
-                                accumulator += columnHistogram[brightness];
-                                columnCumulativeHistogram[brightness] = (accumulator) / pixelCount;
-                                int colorValue = (int)(columnCumulativeHistogram[brightness] * 255);
-                                _histogramImage.SetPixel(brightness + i * intensityRange, y, Color.FromArgb(colorValue, colorValue, colorValue));
-                            }
-                        }
-                    }
-                }
-
-                //pictureBox2.Image = _histogramImage;
-                test.Stop();
-                //toolStripStatusLabel3.Text = "Час обчислення: " + test.ElapsedMilliseconds;
-                return new DefectDefectResult { hasDefect = hasDefects, result = _histogramImage, time = test.ElapsedMilliseconds };
+                sourceImage.UnlockBits(srcData);
+                resultBmp.UnlockBits(resData);
             }
+
+            sw.Stop();
+            return new DefectDefectResult { hasDefect = hasDefects, result = resultBmp, time = sw.ElapsedMilliseconds };
         }
     }
 }
